@@ -10,19 +10,42 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
 /**
+ * Log 等級定義
+ */
+enum class LogLevel {
+    VERBOSE,
+    DEBUG,
+    INFO,
+    WARN,
+    ERROR
+}
+
+/**
  * LogMorphInterceptor 負責攔截 OkHttp 請求與回應，並進行以下處理：
  * 1. 印出請求與回應的詳細資訊 (Headers, Body等)。
  * 2. 自動美化 JSON 格式的 Body 內容。
  * 3. 根據傳入的 [replacements] Map 進行敏感字詞或特定文字的替換。
  *
  * @param replacements key 為想要被替換的文字，value 為替換後的文字。
+ * @param logLevel 指定要使用的 Log 等級，預設為 DEBUG。
  */
 class LogMorphInterceptor(
-    private val replacements: Map<String, String> = emptyMap()
+    private val replacements: Map<String, String> = emptyMap(),
+    private val logLevel: LogLevel = LogLevel.DEBUG
 ) : Interceptor {
 
     companion object {
         private const val TAG = "LogMorph"
+    }
+
+    private fun log(message: String) {
+        when (logLevel) {
+            LogLevel.VERBOSE -> Log.v(TAG, message)
+            LogLevel.DEBUG -> Log.d(TAG, message)
+            LogLevel.INFO -> Log.i(TAG, message)
+            LogLevel.WARN -> Log.w(TAG, message)
+            LogLevel.ERROR -> Log.e(TAG, message)
+        }
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -30,9 +53,9 @@ class LogMorphInterceptor(
         
         // Log Request
         val displayUrl = replaceText(request.url.toString())
-        Log.d(TAG, "--> ${request.method} $displayUrl")
+        log("--> ${request.method} $displayUrl")
         request.headers.forEach { pair ->
-            Log.d(TAG, "${pair.first}: ${pair.second}")
+            log("${pair.first}: ${pair.second}")
         }
 
         request.body?.let { requestBody ->
@@ -44,28 +67,28 @@ class LogMorphInterceptor(
             
             if (isPlaintext(buffer)) {
                 val content = buffer.readString(charset)
-                Log.d(TAG, "Request Body:\n${formatJson(replaceText(content))}")
+                log("Request Body:\n${formatJson(replaceText(content))}")
             } else {
-                Log.d(TAG, "Request Body: (binary ${requestBody.contentLength()}-byte body omitted)")
+                log("Request Body: (binary ${requestBody.contentLength()}-byte body omitted)")
             }
         }
-        Log.d(TAG, "--> END ${request.method}")
+        log("--> END ${request.method}")
 
         val startNs = System.nanoTime()
         val response: Response
         try {
             response = chain.proceed(request)
         } catch (e: Exception) {
-            Log.d(TAG, "<-- HTTP FAILED: $e")
+            log("<-- HTTP FAILED: $e")
             throw e
         }
         val tookMs = (System.nanoTime() - startNs) / 1e6
 
         // Log Response
         val displayResponseUrl = replaceText(response.request.url.toString())
-        Log.d(TAG, "<-- ${response.code} ${response.message} $displayResponseUrl (${tookMs}ms)")
+        log("<-- ${response.code} ${response.message} $displayResponseUrl (${tookMs}ms)")
         response.headers.forEach { pair ->
-            Log.d(TAG, "${pair.first}: ${pair.second}")
+            log("${pair.first}: ${pair.second}")
         }
 
         val responseBody = response.body
@@ -80,13 +103,13 @@ class LogMorphInterceptor(
             if (isPlaintext(buffer)) {
                 if (responseBody.contentLength() != 0L) {
                     val content = buffer.clone().readString(charset)
-                    Log.d(TAG, "Response Body:\n${formatJson(replaceText(content))}")
+                    log("Response Body:\n${formatJson(replaceText(content))}")
                 }
             } else {
-                Log.d(TAG, "Response Body: (binary ${buffer.size}-byte body omitted)")
+                log("Response Body: (binary ${buffer.size}-byte body omitted)")
             }
         }
-        Log.d(TAG, "<-- END HTTP")
+        log("<-- END HTTP")
 
         return response
     }
@@ -109,7 +132,7 @@ class LogMorphInterceptor(
             } else {
                 json
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             json
         }
     }
@@ -119,9 +142,9 @@ class LogMorphInterceptor(
             val prefix = Buffer()
             val byteCount = if (buffer.size < 64) buffer.size else 64
             buffer.copyTo(prefix, 0, byteCount)
-            for (i in 0 until 16) {
+            repeat(16) {
                 if (prefix.exhausted()) {
-                    break
+                    return true
                 }
                 val codePoint = prefix.readUtf8CodePoint()
                 if (Character.isISOControl(codePoint) && !Character.isWhitespace(codePoint)) {
@@ -129,7 +152,7 @@ class LogMorphInterceptor(
                 }
             }
             return true
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             return false // Truncated UTF-8 sequence.
         }
     }
