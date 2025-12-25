@@ -51,13 +51,29 @@ dependencies {
 
 ## 🚀 使用方式
 
+LogMorph 使用 **Builder 模式** 來建立攔截器，提供靈活且易讀的 API。
+
+### Builder 方法說明
+
+| 方法 | 參數 | 說明 |
+|------|------|------|
+| `addReplacement(key, value)` | key: String, value: String | 新增單一替換規則 |
+| `setReplacements(map)` | map: Map<String, String> | 批次設定替換規則 |
+| `setLogLevel(level)` | level: LogLevel | 設定日誌等級 |
+| `setTag(tag)` | tag: String | 設定 Log Tag |
+| `setLogContent(content)` | content: LogContent | 設定顯示內容類型 |
+| `build()` | - | 建立 LogMorphInterceptor 實例 |
+
 ### 基本用法
 
-最簡單的方式，直接加入攔截器：
+使用 Builder 模式建立 LogMorphInterceptor：
 
 ```kotlin
 val client = OkHttpClient.Builder()
-    .addInterceptor(LogMorphInterceptor())
+    .addInterceptor(
+        LogMorphInterceptor.Builder()
+            .build()
+    )
     .build()
 
 val request = Request.Builder()
@@ -74,13 +90,27 @@ client.newCall(request).execute()
 ```kotlin
 val client = OkHttpClient.Builder()
     .addInterceptor(
-        LogMorphInterceptor(
-            replacements = mapOf(
+        LogMorphInterceptor.Builder()
+            .addReplacement("api_key", "***")
+            .addReplacement("password", "***")
+            .addReplacement("token", "***")
+            .build()
+    )
+    .build()
+```
+
+或使用 `setReplacements` 批次設定：
+
+```kotlin
+val client = OkHttpClient.Builder()
+    .addInterceptor(
+        LogMorphInterceptor.Builder()
+            .setReplacements(mapOf(
                 "api_key" to "***",
                 "password" to "***",
                 "token" to "***"
-            )
-        )
+            ))
+            .build()
     )
     .build()
 ```
@@ -92,9 +122,9 @@ val client = OkHttpClient.Builder()
 ```kotlin
 val client = OkHttpClient.Builder()
     .addInterceptor(
-        LogMorphInterceptor(
-            logLevel = LogLevel.INFO
-        )
+        LogMorphInterceptor.Builder()
+            .setLogLevel(LogLevel.INFO)
+            .build()
     )
     .build()
 ```
@@ -113,9 +143,9 @@ val client = OkHttpClient.Builder()
 ```kotlin
 val client = OkHttpClient.Builder()
     .addInterceptor(
-        LogMorphInterceptor(
-            tag = "MyAPI"
-        )
+        LogMorphInterceptor.Builder()
+            .setTag("MyAPI")
+            .build()
     )
     .build()
 ```
@@ -125,14 +155,71 @@ val client = OkHttpClient.Builder()
 ```kotlin
 val client = OkHttpClient.Builder()
     .addInterceptor(
-        LogMorphInterceptor(
-            replacements = mapOf("token" to "***"),
-            logLevel = LogLevel.DEBUG,
-            tag = "UserAPI"
-        )
+        LogMorphInterceptor.Builder()
+            .addReplacement("token", "***")
+            .setLogLevel(LogLevel.DEBUG)
+            .setTag("UserAPI")
+            .setLogContent(LogContent.BODY_ONLY)
+            .build()
     )
     .build()
 ```
+    .addInterceptor(
+        LogMorphInterceptor(
+### 控制顯示內容
+
+使用 `setLogContent` 方法控制要顯示的日誌內容：
+
+```kotlin
+// 顯示所有內容 (Headers + Body) - 預設值
+val clientAll = OkHttpClient.Builder()
+    .addInterceptor(
+        LogMorphInterceptor.Builder()
+            .setLogContent(LogContent.ALL)
+            .build()
+    )
+    .build()
+
+// 只顯示 Headers
+val clientHeadersOnly = OkHttpClient.Builder()
+    .addInterceptor(
+        LogMorphInterceptor.Builder()
+            .setLogContent(LogContent.HEADERS_ONLY)
+            .build()
+    )
+    .build()
+
+// 只顯示 Body
+val clientBodyOnly = OkHttpClient.Builder()
+    .addInterceptor(
+        LogMorphInterceptor.Builder()
+            .setLogContent(LogContent.BODY_ONLY)
+            .build()
+    )
+    .build()
+
+// 只顯示基本資訊 (Method, URL, Status Code, Duration)
+val clientBasic = OkHttpClient.Builder()
+    .addInterceptor(
+        LogMorphInterceptor.Builder()
+            .setLogContent(LogContent.BASIC)
+            .build()
+    )
+    .build()
+```
+
+可用的內容顯示模式：
+- `LogContent.ALL` (預設)：顯示完整資訊 (Headers + Body)
+- `LogContent.HEADERS_ONLY`：只顯示 Headers，不顯示 Body
+- `LogContent.BODY_ONLY`：只顯示 Body，不顯示 Headers
+- `LogContent.BASIC`：只顯示基本資訊 (請求方法、URL、狀態碼、耗時)
+
+#### 使用場景建議
+
+- **LogContent.ALL**：開發除錯階段，需要完整的請求資訊
+- **LogContent.HEADERS_ONLY**：需要驗證認證、內容類型等 Header 資訊
+- **LogContent.BODY_ONLY**：專注於資料內容，不關心 Headers
+- **LogContent.BASIC**：生產環境或效能敏感場景，只記錄基本資訊
 
 ### 完整範例
 
@@ -141,6 +228,7 @@ val client = OkHttpClient.Builder()
 ```kotlin
 import com.anjyue.logmorph.logger.LogMorphInterceptor
 import com.anjyue.logmorph.logger.LogLevel
+import com.anjyue.logmorph.logger.LogContent
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -149,15 +237,14 @@ class NetworkClient {
     
     private val client = OkHttpClient.Builder()
         .addInterceptor(
-            LogMorphInterceptor(
-                replacements = mapOf(
-                    "authorization" to "***",
-                    "api_key" to "***",
-                    "password" to "***"
-                ),
-                logLevel = LogLevel.DEBUG,
-                tag = "NetworkClient"
-            )
+            LogMorphInterceptor.Builder()
+                .addReplacement("authorization", "***")
+                .addReplacement("api_key", "***")
+                .addReplacement("password", "***")
+                .setLogLevel(LogLevel.DEBUG)
+                .setTag("NetworkClient")
+                .setLogContent(LogContent.ALL)
+                .build()
         )
         .build()
     
@@ -344,10 +431,10 @@ coroutineScope {
 ```kotlin
 val okHttpClient = OkHttpClient.Builder()
     .addInterceptor(
-        LogMorphInterceptor(
-            replacements = mapOf("api_key" to "***"),
-            logLevel = LogLevel.DEBUG
-        )
+        LogMorphInterceptor.Builder()
+            .addReplacement("api_key", "***")
+            .setLogLevel(LogLevel.DEBUG)
+            .build()
     )
     .connectTimeout(30, TimeUnit.SECONDS)
     .readTimeout(30, TimeUnit.SECONDS)
@@ -368,7 +455,10 @@ val apiService = retrofit.create(ApiService::class.java)
 val client = OkHttpClient.Builder()
     .apply {
         if (BuildConfig.DEBUG) {
-            addInterceptor(LogMorphInterceptor())
+            addInterceptor(
+                LogMorphInterceptor.Builder()
+                    .build()
+            )
         }
     }
     .build()
@@ -385,6 +475,7 @@ val client = OkHttpClient.Builder()
 | `replacements` | `Map<String, String>` | `emptyMap()` | 設定需要遮罩的敏感資訊，Key 為原始文字，Value 為替換後的文字 |
 | `logLevel` | `LogLevel` | `LogLevel.DEBUG` | 設定日誌輸出等級 |
 | `tag` | `String` | `"LogMorph"` | 自訂的 Log Tag，方便在 Logcat 中過濾 |
+| `logContent` | `LogContent` | `LogContent.ALL` | 控制顯示的內容類型 (ALL/HEADERS_ONLY/BODY_ONLY/BASIC) |
 
 ### LogLevel 列舉
 

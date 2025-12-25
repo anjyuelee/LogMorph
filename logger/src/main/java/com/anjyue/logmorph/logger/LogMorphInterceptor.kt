@@ -21,19 +21,40 @@ enum class LogLevel {
 }
 
 /**
+ * 日誌內容顯示模式
+ */
+enum class LogContent {
+    /** 顯示完整資訊 (Headers + Body) */
+    ALL,
+    /** 只顯示 Headers */
+    HEADERS_ONLY,
+    /** 只顯示 Body */
+    BODY_ONLY,
+    /** 不顯示 Headers 和 Body，只顯示基本資訊 */
+    BASIC
+}
+
+/**
  * LogMorphInterceptor 負責攔截 OkHttp 請求與回應，並進行以下處理：
  * 1. 印出請求與回應的詳細資訊 (Headers, Body等)。
  * 2. 自動美化 JSON 格式的 Body 內容。
  * 3. 根據傳入的 [replacements] Map 進行敏感字詞或特定文字的替換。
  *
- * @param replacements key 為想要被替換的文字，value 為替換後的文字。
- * @param logLevel 指定要使用的 Log 等級，預設為 DEBUG。
- * @param tag 自訂的 Log Tag，預設為 "LogMorph"。
+ * 使用 Builder 模式建立：
+ * ```
+ * val interceptor = LogMorphInterceptor.Builder()
+ *     .addReplacement("token", "***")
+ *     .setLogLevel(LogLevel.DEBUG)
+ *     .setTag("MyAPI")
+ *     .setLogContent(LogContent.ALL)
+ *     .build()
+ * ```
  */
-class LogMorphInterceptor(
-    private val replacements: Map<String, String> = emptyMap(),
-    private val logLevel: LogLevel = LogLevel.DEBUG,
-    private val tag: String = DEFAULT_TAG
+class LogMorphInterceptor private constructor(
+    private val replacements: Map<String, String>,
+    private val logLevel: LogLevel,
+    private val tag: String,
+    private val logContent: LogContent
 ) : Interceptor {
 
     companion object {
@@ -47,6 +68,70 @@ class LogMorphInterceptor(
 
         // 全局同步鎖，確保不同線程的日誌不會交錯
         private val logLock = Any()
+    }
+
+    /**
+     * Builder 類別用於建立 LogMorphInterceptor
+     */
+    class Builder {
+        private val replacements = mutableMapOf<String, String>()
+        private var logLevel: LogLevel = LogLevel.DEBUG
+        private var tag: String = DEFAULT_TAG
+        private var logContent: LogContent = LogContent.ALL
+
+        /**
+         * 新增單一替換規則
+         * @param key 要被替換的文字
+         * @param value 替換後的文字
+         */
+        fun addReplacement(key: String, value: String) = apply {
+            replacements[key] = value
+        }
+
+        /**
+         * 批次設定替換規則
+         * @param replacements 替換規則 Map
+         */
+        fun setReplacements(replacements: Map<String, String>) = apply {
+            this.replacements.clear()
+            this.replacements.putAll(replacements)
+        }
+
+        /**
+         * 設定日誌等級
+         * @param logLevel 日誌等級
+         */
+        fun setLogLevel(logLevel: LogLevel) = apply {
+            this.logLevel = logLevel
+        }
+
+        /**
+         * 設定 Log Tag
+         * @param tag 自訂的 Log Tag
+         */
+        fun setTag(tag: String) = apply {
+            this.tag = tag
+        }
+
+        /**
+         * 設定日誌內容顯示模式
+         * @param logContent 日誌內容顯示模式
+         */
+        fun setLogContent(logContent: LogContent) = apply {
+            this.logContent = logContent
+        }
+
+        /**
+         * 建立 LogMorphInterceptor 實例
+         */
+        fun build(): LogMorphInterceptor {
+            return LogMorphInterceptor(
+                replacements = replacements.toMap(),
+                logLevel = logLevel,
+                tag = tag,
+                logContent = logContent
+            )
+        }
     }
 
     /**
@@ -107,7 +192,7 @@ class LogMorphInterceptor(
         logLine(requestLogBuffer, "Method: ${request.method}")
         logLine(requestLogBuffer, "URL: $displayUrl")
 
-        if (request.headers.size > 0) {
+        if ((logContent == LogContent.ALL || logContent == LogContent.HEADERS_ONLY) && request.headers.size > 0) {
             logDivider(requestLogBuffer, isMiddle = true)
             logLine(requestLogBuffer, "Headers:")
             request.headers.forEach { pair ->
@@ -115,20 +200,22 @@ class LogMorphInterceptor(
             }
         }
 
-        request.body?.let { requestBody ->
-            val buffer = Buffer()
-            requestBody.writeTo(buffer)
-            
-            val contentType = requestBody.contentType()
-            val charset: Charset = contentType?.charset(StandardCharsets.UTF_8) ?: StandardCharsets.UTF_8
-            
-            logDivider(requestLogBuffer, isMiddle = true)
-            if (isPlaintext(buffer)) {
-                val content = buffer.readString(charset)
-                logLine(requestLogBuffer, "Request Body:")
-                logLine(requestLogBuffer, formatJson(replaceText(content)))
-            } else {
-                logLine(requestLogBuffer, "Request Body: (binary ${requestBody.contentLength()}-byte body omitted)")
+        if (logContent == LogContent.ALL || logContent == LogContent.BODY_ONLY) {
+            request.body?.let { requestBody ->
+                val buffer = Buffer()
+                requestBody.writeTo(buffer)
+
+                val contentType = requestBody.contentType()
+                val charset: Charset = contentType?.charset(StandardCharsets.UTF_8) ?: StandardCharsets.UTF_8
+
+                logDivider(requestLogBuffer, isMiddle = true)
+                if (isPlaintext(buffer)) {
+                    val content = buffer.readString(charset)
+                    logLine(requestLogBuffer, "Request Body:")
+                    logLine(requestLogBuffer, formatJson(replaceText(content)))
+                } else {
+                    logLine(requestLogBuffer, "Request Body: (binary ${requestBody.contentLength()}-byte body omitted)")
+                }
             }
         }
         logDivider(requestLogBuffer, isBottom = true)
@@ -168,7 +255,7 @@ class LogMorphInterceptor(
         logLine(responseLogBuffer, "Status Code: ${response.code} ${response.message}")
         logLine(responseLogBuffer, "Duration: ${tookMs}ms")
 
-        if (response.headers.size > 0) {
+        if ((logContent == LogContent.ALL || logContent == LogContent.HEADERS_ONLY) && response.headers.size > 0) {
             logDivider(responseLogBuffer, isMiddle = true)
             logLine(responseLogBuffer, "Headers:")
             response.headers.forEach { pair ->
@@ -176,26 +263,28 @@ class LogMorphInterceptor(
             }
         }
 
-        val responseBody = response.body
-        if (responseBody != null) {
-            val source = responseBody.source()
-            source.request(Long.MAX_VALUE) // Buffer the entire body.
-            val buffer = source.buffer
+        if (logContent == LogContent.ALL || logContent == LogContent.BODY_ONLY) {
+            val responseBody = response.body
+            if (responseBody != null) {
+                val source = responseBody.source()
+                source.request(Long.MAX_VALUE) // Buffer the entire body.
+                val buffer = source.buffer
 
-            val contentType = responseBody.contentType()
-            val charset: Charset = contentType?.charset(StandardCharsets.UTF_8) ?: StandardCharsets.UTF_8
+                val contentType = responseBody.contentType()
+                val charset: Charset = contentType?.charset(StandardCharsets.UTF_8) ?: StandardCharsets.UTF_8
 
-            logDivider(responseLogBuffer, isMiddle = true)
-            if (isPlaintext(buffer)) {
-                if (responseBody.contentLength() != 0L) {
-                    val content = buffer.clone().readString(charset)
-                    logLine(responseLogBuffer, "Response Body:")
-                    logLine(responseLogBuffer, formatJson(replaceText(content)))
+                logDivider(responseLogBuffer, isMiddle = true)
+                if (isPlaintext(buffer)) {
+                    if (responseBody.contentLength() != 0L) {
+                        val content = buffer.clone().readString(charset)
+                        logLine(responseLogBuffer, "Response Body:")
+                        logLine(responseLogBuffer, formatJson(replaceText(content)))
+                    } else {
+                        logLine(responseLogBuffer, "Response Body: (empty)")
+                    }
                 } else {
-                    logLine(responseLogBuffer, "Response Body: (empty)")
+                    logLine(responseLogBuffer, "Response Body: (binary ${buffer.size}-byte body omitted)")
                 }
-            } else {
-                logLine(responseLogBuffer, "Response Body: (binary ${buffer.size}-byte body omitted)")
             }
         }
         logDivider(responseLogBuffer, isBottom = true)

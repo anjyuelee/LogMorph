@@ -49,27 +49,58 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
         Button(
             onClick = {
                 scope.launch(Dispatchers.IO) {
-                    makeRequest()
+                    makeRequestAll()
                 }
             },
             modifier = Modifier.padding(top = 16.dp)
         ) {
-            Text("Test Network Request")
+            Text("顯示全部 (ALL)")
+        }
+
+        Button(
+            onClick = {
+                scope.launch(Dispatchers.IO) {
+                    makeRequestHeadersOnly()
+                }
+            },
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text("只顯示 Headers")
+        }
+
+        Button(
+            onClick = {
+                scope.launch(Dispatchers.IO) {
+                    makeRequestBodyOnly()
+                }
+            },
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text("只顯示 Body")
+        }
+
+        Button(
+            onClick = {
+                scope.launch(Dispatchers.IO) {
+                    makeRequestBasic()
+                }
+            },
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text("基本資訊 (BASIC)")
         }
     }
 }
 
-fun makeRequest() {
+fun makeRequestAll() {
     try {
         val client = OkHttpClient.Builder()
-            // 在這裡使用自定義的 Interceptor
-            // 使用 mapOf 定義要替換的文字，例如將 "origin" 替換成 "***"
-            // 使用 tag 參數自訂 Log Tag
             .addInterceptor(
-                LogMorphInterceptor(
-                    replacements = mapOf("origin" to "***"),
-                    tag = "HttpBinAPI"
-                )
+                LogMorphInterceptor.Builder()
+                    .addReplacement("origin", "***")
+                    .setTag("HttpBin_ALL")
+                    .setLogContent(com.anjyue.logmorph.logger.LogContent.ALL)
+                    .build()
             )
             .build()
 
@@ -78,8 +109,79 @@ fun makeRequest() {
             .build()
 
         client.newCall(request).execute().use { _ ->
-            // Request 會被攔截並在 Logcat 印出美化後的 Log
-            // 可以在 Logcat 中使用 "HttpBinAPI" 這個 Tag 來過濾日誌
+            // 顯示完整資訊 (Headers + Body)
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+fun makeRequestHeadersOnly() {
+    try {
+        val client = OkHttpClient.Builder()
+            .addInterceptor(
+                LogMorphInterceptor.Builder()
+                    .addReplacement("origin", "***")
+                    .setTag("HttpBin_HeadersOnly")
+                    .setLogContent(com.anjyue.logmorph.logger.LogContent.HEADERS_ONLY)
+                    .build()
+            )
+            .build()
+
+        val request = Request.Builder()
+            .url("https://httpbin.org/get")
+            .build()
+
+        client.newCall(request).execute().use { _ ->
+            // 只顯示 Headers，不顯示 Body
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+fun makeRequestBodyOnly() {
+    try {
+        val client = OkHttpClient.Builder()
+            .addInterceptor(
+                LogMorphInterceptor.Builder()
+                    .addReplacement("origin", "***")
+                    .setTag("HttpBin_BodyOnly")
+                    .setLogContent(com.anjyue.logmorph.logger.LogContent.BODY_ONLY)
+                    .build()
+            )
+            .build()
+
+        val request = Request.Builder()
+            .url("https://httpbin.org/get")
+            .build()
+
+        client.newCall(request).execute().use { _ ->
+            // 只顯示 Body，不顯示 Headers
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+fun makeRequestBasic() {
+    try {
+        val client = OkHttpClient.Builder()
+            .addInterceptor(
+                LogMorphInterceptor.Builder()
+                    .addReplacement("origin", "***")
+                    .setTag("HttpBin_Basic")
+                    .setLogContent(com.anjyue.logmorph.logger.LogContent.BASIC)
+                    .build()
+            )
+            .build()
+
+        val request = Request.Builder()
+            .url("https://httpbin.org/get")
+            .build()
+
+        client.newCall(request).execute().use { _ ->
+            // 只顯示基本資訊 (Method, URL, Status Code, Duration)
         }
     } catch (e: Exception) {
         e.printStackTrace()
