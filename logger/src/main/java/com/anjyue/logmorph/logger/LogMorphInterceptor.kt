@@ -36,6 +36,12 @@ class LogMorphInterceptor(
 
     companion object {
         private const val TAG = "LogMorph"
+        private const val TOP_LEFT_CORNER = '╔'
+        private const val BOTTOM_LEFT_CORNER = '╚'
+        private const val DOUBLE_DIVIDER = "════════════════════════════════════════════════════════════════"
+        private const val SINGLE_DIVIDER = "────────────────────────────────────────────────────────────────"
+        private const val SIDE_DIVIDER = "║ "
+        private const val MIDDLE_CORNER = '╟'
     }
 
     private fun log(message: String) {
@@ -48,14 +54,38 @@ class LogMorphInterceptor(
         }
     }
 
+    private fun logDivider(isTop: Boolean = false, isBottom: Boolean = false, isMiddle: Boolean = false) {
+        when {
+            isTop -> log("$TOP_LEFT_CORNER$DOUBLE_DIVIDER$DOUBLE_DIVIDER")
+            isBottom -> log("$BOTTOM_LEFT_CORNER$DOUBLE_DIVIDER$DOUBLE_DIVIDER")
+            isMiddle -> log("$MIDDLE_CORNER$SINGLE_DIVIDER$SINGLE_DIVIDER")
+            else -> log(SIDE_DIVIDER)
+        }
+    }
+
+    private fun logLine(message: String) {
+        message.split('\n').forEach { line ->
+            log("$SIDE_DIVIDER$line")
+        }
+    }
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         
-        // Log Request
+        // Log Request with border
+        logDivider(isTop = true)
         val displayUrl = replaceText(request.url.toString())
-        log("--> ${request.method} $displayUrl")
-        request.headers.forEach { pair ->
-            log("${pair.first}: ${pair.second}")
+        logLine("REQUEST")
+        logDivider(isMiddle = true)
+        logLine("Method: ${request.method}")
+        logLine("URL: $displayUrl")
+
+        if (request.headers.size > 0) {
+            logDivider(isMiddle = true)
+            logLine("Headers:")
+            request.headers.forEach { pair ->
+                logLine("  ${pair.first}: ${pair.second}")
+            }
         }
 
         request.body?.let { requestBody ->
@@ -65,30 +95,44 @@ class LogMorphInterceptor(
             val contentType = requestBody.contentType()
             val charset: Charset = contentType?.charset(StandardCharsets.UTF_8) ?: StandardCharsets.UTF_8
             
+            logDivider(isMiddle = true)
             if (isPlaintext(buffer)) {
                 val content = buffer.readString(charset)
-                log("Request Body:\n${formatJson(replaceText(content))}")
+                logLine("Request Body:")
+                logLine(formatJson(replaceText(content)))
             } else {
-                log("Request Body: (binary ${requestBody.contentLength()}-byte body omitted)")
+                logLine("Request Body: (binary ${requestBody.contentLength()}-byte body omitted)")
             }
         }
-        log("--> END ${request.method}")
+        logDivider(isBottom = true)
 
         val startNs = System.nanoTime()
         val response: Response
         try {
             response = chain.proceed(request)
         } catch (e: Exception) {
-            log("<-- HTTP FAILED: $e")
+            logDivider(isTop = true)
+            logLine("HTTP FAILED: $e")
+            logDivider(isBottom = true)
             throw e
         }
         val tookMs = (System.nanoTime() - startNs) / 1e6
 
-        // Log Response
+        // Log Response with border
+        logDivider(isTop = true)
         val displayResponseUrl = replaceText(response.request.url.toString())
-        log("<-- ${response.code} ${response.message} $displayResponseUrl (${tookMs}ms)")
-        response.headers.forEach { pair ->
-            log("${pair.first}: ${pair.second}")
+        logLine("RESPONSE")
+        logDivider(isMiddle = true)
+        logLine("URL: $displayResponseUrl")
+        logLine("Status Code: ${response.code} ${response.message}")
+        logLine("Duration: ${tookMs}ms")
+
+        if (response.headers.size > 0) {
+            logDivider(isMiddle = true)
+            logLine("Headers:")
+            response.headers.forEach { pair ->
+                logLine("  ${pair.first}: ${pair.second}")
+            }
         }
 
         val responseBody = response.body
@@ -100,16 +144,20 @@ class LogMorphInterceptor(
             val contentType = responseBody.contentType()
             val charset: Charset = contentType?.charset(StandardCharsets.UTF_8) ?: StandardCharsets.UTF_8
 
+            logDivider(isMiddle = true)
             if (isPlaintext(buffer)) {
                 if (responseBody.contentLength() != 0L) {
                     val content = buffer.clone().readString(charset)
-                    log("Response Body:\n${formatJson(replaceText(content))}")
+                    logLine("Response Body:")
+                    logLine(formatJson(replaceText(content)))
+                } else {
+                    logLine("Response Body: (empty)")
                 }
             } else {
-                log("Response Body: (binary ${buffer.size}-byte body omitted)")
+                logLine("Response Body: (binary ${buffer.size}-byte body omitted)")
             }
         }
-        log("<-- END HTTP")
+        logDivider(isBottom = true)
 
         return response
     }
