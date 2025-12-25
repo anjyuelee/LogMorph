@@ -17,6 +17,7 @@
 - 🔒 **敏感資訊遮罩** - 可自訂替換規則，保護敏感資料
 - ⚙️ **自訂日誌等級** - 支援 VERBOSE、DEBUG、INFO、WARN、ERROR
 - 🏷️ **自訂 Log Tag** - 可自訂 Log Tag，方便過濾和識別不同的網路請求
+- 🧵 **線程安全** - 確保多線程環境下每個完整的日誌不會被其他線程的日誌插入
 - 🚀 **輕量且易用** - 簡單整合，無需複雜設定
 
 ---
@@ -132,10 +133,6 @@ val client = OkHttpClient.Builder()
     )
     .build()
 ```
-- `LogLevel.DEBUG` (預設)
-- `LogLevel.INFO`
-- `LogLevel.WARN`
-- `LogLevel.ERROR`
 
 ### 完整範例
 
@@ -315,6 +312,32 @@ fun NetworkTestScreen() {
 ---
 
 ## 🔧 進階設定
+
+### 線程安全
+
+LogMorphInterceptor 已實現線程安全機制，確保在多線程環境下（如並發的網路請求），每個完整的請求-響應日誌區塊都能完整呈現，不會被其他線程的日誌插入。
+
+內部實現：
+- 使用全局同步鎖 (`synchronized`) 保護日誌輸出過程
+- 將完整的日誌內容先收集到緩衝區，再一次性輸出
+- 每個 HTTP 請求和響應分別作為獨立的日誌區塊輸出
+
+這確保了即使在高併發的情況下，你也能清晰地看到每個請求的完整資訊：
+
+```kotlin
+// 即使同時發起多個請求，每個請求的日誌都能完整呈現
+val client = OkHttpClient.Builder()
+    .addInterceptor(LogMorphInterceptor())
+    .build()
+
+// 並發執行多個請求
+coroutineScope {
+    launch { client.newCall(request1).execute() }
+    launch { client.newCall(request2).execute() }
+    launch { client.newCall(request3).execute() }
+}
+// 輸出的日誌不會交錯混亂
+```
 
 ### 結合 Retrofit 使用
 

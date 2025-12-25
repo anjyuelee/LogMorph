@@ -44,49 +44,74 @@ class LogMorphInterceptor(
         private const val SINGLE_DIVIDER = "────────────────────────────────────────────────────────────────"
         private const val SIDE_DIVIDER = "║ "
         private const val MIDDLE_CORNER = '╟'
+
+        // 全局同步鎖，確保不同線程的日誌不會交錯
+        private val logLock = Any()
     }
 
-    private fun log(message: String) {
-        when (logLevel) {
-            LogLevel.VERBOSE -> Log.v(tag, message)
-            LogLevel.DEBUG -> Log.d(tag, message)
-            LogLevel.INFO -> Log.i(tag, message)
-            LogLevel.WARN -> Log.w(tag, message)
-            LogLevel.ERROR -> Log.e(tag, message)
+    /**
+     * 日誌緩衝區，用於收集完整的日誌內容後一次性輸出
+     */
+    private class LogBuffer {
+        private val buffer = StringBuilder()
+
+        fun append(line: String) {
+            buffer.append(line).append('\n')
+        }
+
+        fun flush(tag: String, logLevel: LogLevel) {
+            val content = buffer.toString()
+            // 移除最後一個換行符
+            val finalContent = if (content.endsWith('\n')) {
+                content.substring(0, content.length - 1)
+            } else {
+                content
+            }
+
+            when (logLevel) {
+                LogLevel.VERBOSE -> Log.v(tag, finalContent)
+                LogLevel.DEBUG -> Log.d(tag, finalContent)
+                LogLevel.INFO -> Log.i(tag, finalContent)
+                LogLevel.WARN -> Log.w(tag, finalContent)
+                LogLevel.ERROR -> Log.e(tag, finalContent)
+            }
         }
     }
 
-    private fun logDivider(isTop: Boolean = false, isBottom: Boolean = false, isMiddle: Boolean = false) {
+    private fun logDivider(buffer: LogBuffer, isTop: Boolean = false, isBottom: Boolean = false, isMiddle: Boolean = false) {
         when {
-            isTop -> log("$TOP_LEFT_CORNER$DOUBLE_DIVIDER$DOUBLE_DIVIDER")
-            isBottom -> log("$BOTTOM_LEFT_CORNER$DOUBLE_DIVIDER$DOUBLE_DIVIDER")
-            isMiddle -> log("$MIDDLE_CORNER$SINGLE_DIVIDER$SINGLE_DIVIDER")
-            else -> log(SIDE_DIVIDER)
+            isTop -> buffer.append("$TOP_LEFT_CORNER$DOUBLE_DIVIDER$DOUBLE_DIVIDER")
+            isBottom -> buffer.append("$BOTTOM_LEFT_CORNER$DOUBLE_DIVIDER$DOUBLE_DIVIDER")
+            isMiddle -> buffer.append("$MIDDLE_CORNER$SINGLE_DIVIDER$SINGLE_DIVIDER")
+            else -> buffer.append(SIDE_DIVIDER)
         }
     }
 
-    private fun logLine(message: String) {
+    private fun logLine(buffer: LogBuffer, message: String) {
         message.split('\n').forEach { line ->
-            log("$SIDE_DIVIDER$line")
+            buffer.append("$SIDE_DIVIDER$line")
         }
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         
+        // 創建日誌緩衝區收集請求日誌
+        val requestLogBuffer = LogBuffer()
+
         // Log Request with border
-        logDivider(isTop = true)
+        logDivider(requestLogBuffer, isTop = true)
         val displayUrl = replaceText(request.url.toString())
-        logLine("REQUEST")
-        logDivider(isMiddle = true)
-        logLine("Method: ${request.method}")
-        logLine("URL: $displayUrl")
+        logLine(requestLogBuffer, "REQUEST")
+        logDivider(requestLogBuffer, isMiddle = true)
+        logLine(requestLogBuffer, "Method: ${request.method}")
+        logLine(requestLogBuffer, "URL: $displayUrl")
 
         if (request.headers.size > 0) {
-            logDivider(isMiddle = true)
-            logLine("Headers:")
+            logDivider(requestLogBuffer, isMiddle = true)
+            logLine(requestLogBuffer, "Headers:")
             request.headers.forEach { pair ->
-                logLine("  ${pair.first}: ${pair.second}")
+                logLine(requestLogBuffer, "  ${pair.first}: ${pair.second}")
             }
         }
 
@@ -97,43 +122,57 @@ class LogMorphInterceptor(
             val contentType = requestBody.contentType()
             val charset: Charset = contentType?.charset(StandardCharsets.UTF_8) ?: StandardCharsets.UTF_8
             
-            logDivider(isMiddle = true)
+            logDivider(requestLogBuffer, isMiddle = true)
             if (isPlaintext(buffer)) {
                 val content = buffer.readString(charset)
-                logLine("Request Body:")
-                logLine(formatJson(replaceText(content)))
+                logLine(requestLogBuffer, "Request Body:")
+                logLine(requestLogBuffer, formatJson(replaceText(content)))
             } else {
-                logLine("Request Body: (binary ${requestBody.contentLength()}-byte body omitted)")
+                logLine(requestLogBuffer, "Request Body: (binary ${requestBody.contentLength()}-byte body omitted)")
             }
         }
-        logDivider(isBottom = true)
+        logDivider(requestLogBuffer, isBottom = true)
+
+        // 同步輸出請求日誌
+        synchronized(logLock) {
+            requestLogBuffer.flush(tag, logLevel)
+        }
 
         val startNs = System.nanoTime()
         val response: Response
         try {
             response = chain.proceed(request)
         } catch (e: Exception) {
-            logDivider(isTop = true)
-            logLine("HTTP FAILED: $e")
-            logDivider(isBottom = true)
+            val errorLogBuffer = LogBuffer()
+            logDivider(errorLogBuffer, isTop = true)
+            logLine(errorLogBuffer, "HTTP FAILED: $e")
+            logDivider(errorLogBuffer, isBottom = true)
+
+            // 同步輸出錯誤日誌
+            synchronized(logLock) {
+                errorLogBuffer.flush(tag, logLevel)
+            }
             throw e
         }
         val tookMs = (System.nanoTime() - startNs) / 1e6
 
+        // 創建日誌緩衝區收集響應日誌
+        val responseLogBuffer = LogBuffer()
+
         // Log Response with border
-        logDivider(isTop = true)
+        logDivider(responseLogBuffer, isTop = true)
         val displayResponseUrl = replaceText(response.request.url.toString())
-        logLine("RESPONSE")
-        logDivider(isMiddle = true)
-        logLine("URL: $displayResponseUrl")
-        logLine("Status Code: ${response.code} ${response.message}")
-        logLine("Duration: ${tookMs}ms")
+        logLine(responseLogBuffer, "RESPONSE")
+        logDivider(responseLogBuffer, isMiddle = true)
+        logLine(responseLogBuffer, "URL: $displayResponseUrl")
+        logLine(responseLogBuffer, "Status Code: ${response.code} ${response.message}")
+        logLine(responseLogBuffer, "Duration: ${tookMs}ms")
 
         if (response.headers.size > 0) {
-            logDivider(isMiddle = true)
-            logLine("Headers:")
+            logDivider(responseLogBuffer, isMiddle = true)
+            logLine(responseLogBuffer, "Headers:")
             response.headers.forEach { pair ->
-                logLine("  ${pair.first}: ${pair.second}")
+                logLine(responseLogBuffer, "  ${pair.first}: ${pair.second}")
             }
         }
 
@@ -146,20 +185,25 @@ class LogMorphInterceptor(
             val contentType = responseBody.contentType()
             val charset: Charset = contentType?.charset(StandardCharsets.UTF_8) ?: StandardCharsets.UTF_8
 
-            logDivider(isMiddle = true)
+            logDivider(responseLogBuffer, isMiddle = true)
             if (isPlaintext(buffer)) {
                 if (responseBody.contentLength() != 0L) {
                     val content = buffer.clone().readString(charset)
-                    logLine("Response Body:")
-                    logLine(formatJson(replaceText(content)))
+                    logLine(responseLogBuffer, "Response Body:")
+                    logLine(responseLogBuffer, formatJson(replaceText(content)))
                 } else {
-                    logLine("Response Body: (empty)")
+                    logLine(responseLogBuffer, "Response Body: (empty)")
                 }
             } else {
-                logLine("Response Body: (binary ${buffer.size}-byte body omitted)")
+                logLine(responseLogBuffer, "Response Body: (binary ${buffer.size}-byte body omitted)")
             }
         }
-        logDivider(isBottom = true)
+        logDivider(responseLogBuffer, isBottom = true)
+
+        // 同步輸出響應日誌
+        synchronized(logLock) {
+            responseLogBuffer.flush(tag, logLevel)
+        }
 
         return response
     }
