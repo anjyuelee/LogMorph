@@ -1,57 +1,71 @@
 # LogMorph
 
-LogMorph 是一個 OkHttp 的攔截器 (Interceptor) 函式庫，專門用於美化 JSON Log 並支援敏感資料遮蔽。
+[![](https://jitpack.io/v/anjyuelee/LogMorph.svg)](https://jitpack.io/#anjyuelee/LogMorph)
 
-## 專案結構
+LogMorph 是一個 OkHttp 攔截器，提供：
+- 🎨 自動美化 JSON 格式的 Log
+- 🔒 敏感資料遮蔽功能
+- 📋 完整的 Request/Response 資訊
 
-本專案包含兩個模組：
-1. **app**: 範例應用程式，展示如何使用 `LogMorphInterceptor`。
-2. **logger**: Android Library 模組，包含 `LogMorphInterceptor` 的核心邏輯。
+## 安裝
 
-## 如何發佈到 Maven
+### Step 1: 加入 JitPack repository
 
-本專案支援發佈至自定義的 Maven Repository。請在專案根目錄的 `gradle.properties` (或全域 `~/.gradle/gradle.properties`) 設定以下變數：
+在 `settings.gradle.kts` 中：
 
-```properties
-myMavenRepoUrl=https://your.maven.repo/url
-myMavenRepoUsername=your_username
-myMavenRepoPassword=your_password
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
 ```
 
-### 執行發佈
+### Step 2: 加入依賴
 
-設定完成後，執行以下指令將 Library 發佈至指定的 Repository：
+在 app 模組的 `build.gradle.kts` 中：
 
-```bash
-./gradlew :logger:publishReleasePublicationToMyRepoRepository
-```
-
-(若未設定 Url，預設會發佈到 `logger/build/repo` 資料夾中)
-
-### 發佈到本地 Maven Local
-
-若僅供本機測試，仍可使用：
-
-```bash
-./gradlew :logger:publishReleasePublicationToMavenLocal
+```kotlin
+dependencies {
+    implementation("com.github.anjyuelee:LogMorph:1.0.0")
+}
 ```
 
 ## 使用方式
 
-### 加入相依性
-
-發佈成功後，在其他專案中加入：
-
-```kotlin
-dependencies {
-    implementation("com.anjyue.logmorph:logger:1.0.0")
-}
-```
-
-### 初始化
+### 基本用法
 
 ```kotlin
 val client = OkHttpClient.Builder()
-    .addInterceptor(LogMorphInterceptor(mapOf("敏感字" to "***")))
+    .addInterceptor(LogMorphInterceptor())
     .build()
 ```
+
+### 敏感資料遮蔽
+
+```kotlin
+val client = OkHttpClient.Builder()
+    .addInterceptor(LogMorphInterceptor(
+        replacements = mapOf(
+            "password" to "***",
+            "token" to "***",
+            "敏感字" to "已遮蔽"
+        )
+    ))
+    .build()
+```
+
+## 功能特色
+
+- ✅ 自動偵測並美化 JSON 格式（縮排 4 空格）
+- ✅ 顯示 Request/Response Headers
+- ✅ 顯示請求耗時
+- ✅ 支援敏感字詞替換
+- ✅ 自動處理二進位內容
+
+## License
+
+Apache License 2.0
+

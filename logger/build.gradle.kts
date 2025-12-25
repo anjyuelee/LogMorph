@@ -2,12 +2,11 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     `maven-publish`
-    signing
 }
 
 android {
     namespace = "com.anjyue.logmorph.logger"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 24
@@ -49,59 +48,24 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
 }
 
-group = property("GROUP") as String
+group = "com.github.anjyuelee"
 version = property("VERSION_NAME") as String
 
 publishing {
     publications {
         register<MavenPublication>("release") {
-            from(components["release"])
-            groupId = group.toString()
-            artifactId = "logger"
-            version = version.toString()
-
-            pom {
-                name.set(property("POM_NAME") as String)
-                description.set(property("POM_DESCRIPTION") as String)
-                url.set(property("POM_URL") as String)
-                licenses {
-                    license {
-                        name.set(property("POM_LICENSE_NAME") as String)
-                        url.set(property("POM_LICENSE_URL") as String)
-                        distribution.set(property("POM_LICENSE_DIST") as String)
-                    }
-                }
-                developers {
-                    developer {
-                        id.set(property("POM_DEVELOPER_ID") as String)
-                        name.set(property("POM_DEVELOPER_NAME") as String)
-                        email.set(property("POM_DEVELOPER_EMAIL") as String)
-                    }
-                }
-                scm {
-                    url.set(property("POM_SCM_URL") as String)
-                    connection.set(property("POM_SCM_CONNECTION") as String)
-                    developerConnection.set(property("POM_SCM_DEV_CONNECTION") as String)
-                }
+            afterEvaluate {
+                from(components["release"])
             }
-        }
-    }
-    repositories {
-        maven {
-            name = "sonatype"
-            url = uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
-            credentials {
-                username = findProperty("ossrhUsername") as String?
-                password = findProperty("ossrhPassword") as String?
-            }
-        }
-        maven {
-            name = "localTest"
-            url = uri(layout.buildDirectory.dir("repo"))
+            groupId = "com.github.anjyuelee"
+            artifactId = "LogMorph"
+            version = project.version.toString()
         }
     }
 }
 
-signing {
-    sign(publishing.publications["release"])
+// JitPack 需要：禁用 Gradle module metadata
+tasks.withType<GenerateModuleMetadata> {
+    enabled = false
 }
+
