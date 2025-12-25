@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
-    
+
     Column(modifier = modifier.padding(16.dp)) {
         Text(text = "Hello $name!")
         
@@ -64,15 +64,22 @@ fun makeRequest() {
         val client = OkHttpClient.Builder()
             // 在這裡使用自定義的 Interceptor
             // 使用 mapOf 定義要替換的文字，例如將 "origin" 替換成 "***"
-            .addInterceptor(LogMorphInterceptor(mapOf("origin" to "***")))
+            // 使用 tag 參數自訂 Log Tag
+            .addInterceptor(
+                LogMorphInterceptor(
+                    replacements = mapOf("origin" to "***"),
+                    tag = "HttpBinAPI"
+                )
+            )
             .build()
 
         val request = Request.Builder()
             .url("https://httpbin.org/get")
             .build()
 
-        client.newCall(request).execute().use { response ->
+        client.newCall(request).execute().use { _ ->
             // Request 會被攔截並在 Logcat 印出美化後的 Log
+            // 可以在 Logcat 中使用 "HttpBinAPI" 這個 Tag 來過濾日誌
         }
     } catch (e: Exception) {
         e.printStackTrace()

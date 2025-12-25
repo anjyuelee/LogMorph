@@ -28,14 +28,16 @@ enum class LogLevel {
  *
  * @param replacements key 為想要被替換的文字，value 為替換後的文字。
  * @param logLevel 指定要使用的 Log 等級，預設為 DEBUG。
+ * @param tag 自訂的 Log Tag，預設為 "LogMorph"。
  */
 class LogMorphInterceptor(
     private val replacements: Map<String, String> = emptyMap(),
-    private val logLevel: LogLevel = LogLevel.DEBUG
+    private val logLevel: LogLevel = LogLevel.DEBUG,
+    private val tag: String = DEFAULT_TAG
 ) : Interceptor {
 
     companion object {
-        private const val TAG = "LogMorph"
+        private const val DEFAULT_TAG = "LogMorph"
         private const val TOP_LEFT_CORNER = '╔'
         private const val BOTTOM_LEFT_CORNER = '╚'
         private const val DOUBLE_DIVIDER = "════════════════════════════════════════════════════════════════"
@@ -46,11 +48,11 @@ class LogMorphInterceptor(
 
     private fun log(message: String) {
         when (logLevel) {
-            LogLevel.VERBOSE -> Log.v(TAG, message)
-            LogLevel.DEBUG -> Log.d(TAG, message)
-            LogLevel.INFO -> Log.i(TAG, message)
-            LogLevel.WARN -> Log.w(TAG, message)
-            LogLevel.ERROR -> Log.e(TAG, message)
+            LogLevel.VERBOSE -> Log.v(tag, message)
+            LogLevel.DEBUG -> Log.d(tag, message)
+            LogLevel.INFO -> Log.i(tag, message)
+            LogLevel.WARN -> Log.w(tag, message)
+            LogLevel.ERROR -> Log.e(tag, message)
         }
     }
 

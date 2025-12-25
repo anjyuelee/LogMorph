@@ -16,6 +16,7 @@
 - 🎨 **自動 JSON 格式化** - 自動美化 JSON 格式的請求和回應內容
 - 🔒 **敏感資訊遮罩** - 可自訂替換規則，保護敏感資料
 - ⚙️ **自訂日誌等級** - 支援 VERBOSE、DEBUG、INFO、WARN、ERROR
+- 🏷️ **自訂 Log Tag** - 可自訂 Log Tag，方便過濾和識別不同的網路請求
 - 🚀 **輕量且易用** - 簡單整合，無需複雜設定
 
 ---
@@ -104,6 +105,38 @@ val client = OkHttpClient.Builder()
 - `LogLevel.WARN`
 - `LogLevel.ERROR`
 
+### 自訂 Log Tag
+
+自訂 Log Tag 方便在 Logcat 中過濾和識別不同的網路請求：
+
+```kotlin
+val client = OkHttpClient.Builder()
+    .addInterceptor(
+        LogMorphInterceptor(
+            tag = "MyAPI"
+        )
+    )
+    .build()
+```
+
+或結合其他參數一起使用：
+
+```kotlin
+val client = OkHttpClient.Builder()
+    .addInterceptor(
+        LogMorphInterceptor(
+            replacements = mapOf("token" to "***"),
+            logLevel = LogLevel.DEBUG,
+            tag = "UserAPI"
+        )
+    )
+    .build()
+```
+- `LogLevel.DEBUG` (預設)
+- `LogLevel.INFO`
+- `LogLevel.WARN`
+- `LogLevel.ERROR`
+
 ### 完整範例
 
 結合所有功能的完整範例：
@@ -125,7 +158,8 @@ class NetworkClient {
                     "api_key" to "***",
                     "password" to "***"
                 ),
-                logLevel = LogLevel.DEBUG
+                logLevel = LogLevel.DEBUG,
+                tag = "NetworkClient"
             )
         )
         .build()
@@ -327,6 +361,7 @@ val client = OkHttpClient.Builder()
 |------|------|--------|------|
 | `replacements` | `Map<String, String>` | `emptyMap()` | 設定需要遮罩的敏感資訊，Key 為原始文字，Value 為替換後的文字 |
 | `logLevel` | `LogLevel` | `LogLevel.DEBUG` | 設定日誌輸出等級 |
+| `tag` | `String` | `"LogMorph"` | 自訂的 Log Tag，方便在 Logcat 中過濾 |
 
 ### LogLevel 列舉
 
