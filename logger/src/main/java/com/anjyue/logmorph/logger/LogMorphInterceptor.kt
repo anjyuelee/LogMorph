@@ -29,7 +29,8 @@ class LogMorphInterceptor(
         val request = chain.request()
         
         // Log Request
-        Log.d(TAG, "--> ${request.method} ${request.url}")
+        val displayUrl = replaceText(request.url.toString())
+        Log.d(TAG, "--> ${request.method} $displayUrl")
         request.headers.forEach { pair ->
             Log.d(TAG, "${pair.first}: ${pair.second}")
         }
@@ -61,7 +62,8 @@ class LogMorphInterceptor(
         val tookMs = (System.nanoTime() - startNs) / 1e6
 
         // Log Response
-        Log.d(TAG, "<-- ${response.code} ${response.message} ${response.request.url} (${tookMs}ms)")
+        val displayResponseUrl = replaceText(response.request.url.toString())
+        Log.d(TAG, "<-- ${response.code} ${response.message} $displayResponseUrl (${tookMs}ms)")
         response.headers.forEach { pair ->
             Log.d(TAG, "${pair.first}: ${pair.second}")
         }
@@ -92,7 +94,7 @@ class LogMorphInterceptor(
     private fun replaceText(input: String): String {
         var result = input
         replacements.forEach { (key, value) ->
-            result = result.replace(key, value)
+            result = result.replace(key, "$key [$value]")
         }
         return result
     }
