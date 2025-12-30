@@ -89,6 +89,17 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
         ) {
             Text("基本資訊 (BASIC)")
         }
+
+        Button(
+            onClick = {
+                scope.launch(Dispatchers.IO) {
+                    makeRequestReplaceUrlOnly()
+                }
+            },
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text("只替換 URL")
+        }
     }
 }
 
@@ -182,6 +193,33 @@ fun makeRequestBasic() {
 
         client.newCall(request).execute().use { _ ->
             // 只顯示基本資訊 (Method, URL, Status Code, Duration)
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+fun makeRequestReplaceUrlOnly() {
+    try {
+        val client = OkHttpClient.Builder()
+            .addInterceptor(
+                LogMorphInterceptor.Builder()
+                    .addReplacement("origin", "***")
+                    .addReplacement("httpbin.org", "[MASKED_DOMAIN]")
+                    .setTag("HttpBin_ReplaceUrlOnly")
+                    .setLogContent(com.anjyue.logmorph.logger.LogContent.ALL)
+                    .setReplaceUrlOnly(true)  // 只替換 URL，不替換 Body
+                    .build()
+            )
+            .build()
+
+        val request = Request.Builder()
+            .url("https://httpbin.org/get")
+            .build()
+
+        client.newCall(request).execute().use { _ ->
+            // URL 中的 "origin" 和 "httpbin.org" 會被替換
+            // 但 Response Body 中的 "origin" 和 "httpbin.org" 不會被替換
         }
     } catch (e: Exception) {
         e.printStackTrace()

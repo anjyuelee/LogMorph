@@ -62,6 +62,7 @@ LogMorph 使用 **Builder 模式** 來建立攔截器，提供靈活且易讀的
 | `setLogLevel(level)` | level: LogLevel | 設定日誌等級 |
 | `setTag(tag)` | tag: String | 設定 Log Tag |
 | `setLogContent(content)` | content: LogContent | 設定顯示內容類型 |
+| `setReplaceUrlOnly(enabled)` | enabled: Boolean | 設定是否只替換 URL 中的內容（預設：false） |
 | `build()` | - | 建立 LogMorphInterceptor 實例 |
 
 ### 基本用法
@@ -164,8 +165,7 @@ val client = OkHttpClient.Builder()
     )
     .build()
 ```
-    .addInterceptor(
-        LogMorphInterceptor(
+
 ### 控制顯示內容
 
 使用 `setLogContent` 方法控制要顯示的日誌內容：
@@ -220,6 +220,47 @@ val clientBasic = OkHttpClient.Builder()
 - **LogContent.HEADERS_ONLY**：需要驗證認證、內容類型等 Header 資訊
 - **LogContent.BODY_ONLY**：專注於資料內容，不關心 Headers
 - **LogContent.BASIC**：生產環境或效能敏感場景，只記錄基本資訊
+
+### 只替換 URL 中的敏感資訊
+
+如果你只想遮罩 URL 中的敏感資訊，但保留 Body 中的原始內容，可以使用 `setReplaceUrlOnly(true)`：
+
+```kotlin
+val client = OkHttpClient.Builder()
+    .addInterceptor(
+        LogMorphInterceptor.Builder()
+            .addReplacement("api_key", "***")
+            .addReplacement("token", "***")
+            .setReplaceUrlOnly(true)  // 只替換 URL，不替換 Body
+            .build()
+    )
+    .build()
+```
+
+**範例說明：**
+
+假設發送以下請求：
+```
+URL: https://api.example.com/data?api_key=secret123&token=abc456
+Body: { "api_key": "secret123", "token": "abc456" }
+```
+
+使用 `setReplaceUrlOnly(false)` （預設）：
+```
+URL: https://api.example.com/data?api_key [***]=secret123&token [***]=abc456
+Body: { "api_key [***]": "secret123", "token [***]": "abc456" }
+```
+
+使用 `setReplaceUrlOnly(true)`：
+```
+URL: https://api.example.com/data?api_key [***]=secret123&token [***]=abc456
+Body: { "api_key": "secret123", "token": "abc456" }  // Body 保持原樣
+```
+
+**使用場景：**
+- 保護 URL 參數中的敏感資訊（如 API Key、Token）
+- 需要完整查看 Response Body 內容進行除錯
+- URL 和 Body 的敏感度不同，需要差異化處理
 
 ### 完整範例
 
@@ -476,6 +517,7 @@ val client = OkHttpClient.Builder()
 | `logLevel` | `LogLevel` | `LogLevel.DEBUG` | 設定日誌輸出等級 |
 | `tag` | `String` | `"LogMorph"` | 自訂的 Log Tag，方便在 Logcat 中過濾 |
 | `logContent` | `LogContent` | `LogContent.ALL` | 控制顯示的內容類型 (ALL/HEADERS_ONLY/BODY_ONLY/BASIC) |
+| `replaceUrlOnly` | `Boolean` | `false` | 是否只替換 URL 中的內容，不替換 Body |
 
 ### LogLevel 列舉
 

@@ -54,7 +54,8 @@ class LogMorphInterceptor private constructor(
     private val replacements: Map<String, String>,
     private val logLevel: LogLevel,
     private val tag: String,
-    private val logContent: LogContent
+    private val logContent: LogContent,
+    private val replaceUrlOnly: Boolean
 ) : Interceptor {
 
     companion object {
@@ -78,6 +79,7 @@ class LogMorphInterceptor private constructor(
         private var logLevel: LogLevel = LogLevel.DEBUG
         private var tag: String = DEFAULT_TAG
         private var logContent: LogContent = LogContent.ALL
+        private var replaceUrlOnly: Boolean = false
 
         /**
          * 新增單一替換規則
@@ -122,6 +124,14 @@ class LogMorphInterceptor private constructor(
         }
 
         /**
+         * 設定是否只替換 URL 中的內容
+         * @param replaceUrlOnly true: 只替換 URL，false: 替換所有內容（預設）
+         */
+        fun setReplaceUrlOnly(replaceUrlOnly: Boolean) = apply {
+            this.replaceUrlOnly = replaceUrlOnly
+        }
+
+        /**
          * 建立 LogMorphInterceptor 實例
          */
         fun build(): LogMorphInterceptor {
@@ -129,7 +139,8 @@ class LogMorphInterceptor private constructor(
                 replacements = replacements.toMap(),
                 logLevel = logLevel,
                 tag = tag,
-                logContent = logContent
+                logContent = logContent,
+                replaceUrlOnly = replaceUrlOnly
             )
         }
     }
@@ -186,7 +197,7 @@ class LogMorphInterceptor private constructor(
 
         // Log Request with border
         logDivider(requestLogBuffer, isTop = true)
-        val displayUrl = replaceText(request.url.toString())
+        val displayUrl = replaceText(request.url.toString(), isUrl = true)
         logLine(requestLogBuffer, "REQUEST")
         logDivider(requestLogBuffer, isMiddle = true)
         logLine(requestLogBuffer, "Method: ${request.method}")
@@ -212,7 +223,7 @@ class LogMorphInterceptor private constructor(
                 if (isPlaintext(buffer)) {
                     val content = buffer.readString(charset)
                     logLine(requestLogBuffer, "Request Body:")
-                    logLine(requestLogBuffer, formatJson(replaceText(content)))
+                    logLine(requestLogBuffer, formatJson(replaceText(content, isUrl = false)))
                 } else {
                     logLine(requestLogBuffer, "Request Body: (binary ${requestBody.contentLength()}-byte body omitted)")
                 }
@@ -248,7 +259,7 @@ class LogMorphInterceptor private constructor(
 
         // Log Response with border
         logDivider(responseLogBuffer, isTop = true)
-        val displayResponseUrl = replaceText(response.request.url.toString())
+        val displayResponseUrl = replaceText(response.request.url.toString(), isUrl = true)
         logLine(responseLogBuffer, "RESPONSE")
         logDivider(responseLogBuffer, isMiddle = true)
         logLine(responseLogBuffer, "URL: $displayResponseUrl")
@@ -278,7 +289,7 @@ class LogMorphInterceptor private constructor(
                     if (responseBody.contentLength() != 0L) {
                         val content = buffer.clone().readString(charset)
                         logLine(responseLogBuffer, "Response Body:")
-                        logLine(responseLogBuffer, formatJson(replaceText(content)))
+                        logLine(responseLogBuffer, formatJson(replaceText(content, isUrl = false)))
                     } else {
                         logLine(responseLogBuffer, "Response Body: (empty)")
                     }
@@ -297,7 +308,12 @@ class LogMorphInterceptor private constructor(
         return response
     }
 
-    private fun replaceText(input: String): String {
+    private fun replaceText(input: String, isUrl: Boolean = false): String {
+        // 如果 replaceUrlOnly 為 true，只替換 URL
+        if (replaceUrlOnly && !isUrl) {
+            return input
+        }
+
         var result = input
         replacements.forEach { (key, value) ->
             result = result.replace(key, "$key [$value]")
